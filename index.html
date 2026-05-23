@@ -140,25 +140,29 @@
     .card-cover.theme-6 { background: linear-gradient(135deg, #30cfd0, #330867); }
     .card-cover img { width: 100%; height: 100%; object-fit: cover; }
 
-    /* 杂志风文字封面（无真图时使用）—— 像 New Yorker 那种 */
-    .card-cover.text-cover {
-      flex-direction: column; justify-content: space-between; align-items: stretch;
+    /* 杂志风文字封面（无真图时使用，也作为有图卡片图片加载失败的 fallback）*/
+    .text-cover {
+      display: flex; flex-direction: column; justify-content: space-between; align-items: stretch;
       padding: 18px 18px 16px; text-align: left;
       background: linear-gradient(135deg, #2a2420 0%, #3a2f24 50%, #1e1914 100%);
       position: relative; overflow: hidden;
+      width: 100%; height: 100%;
     }
-    .card-cover.text-cover::before {
+    .text-cover::before {
       content: ''; position: absolute; inset: 0;
       background: radial-gradient(circle at 85% 15%, rgba(212,165,116,0.22), transparent 55%),
                   radial-gradient(circle at 10% 90%, rgba(212,165,116,0.10), transparent 50%);
       pointer-events: none;
     }
-    .card-cover.text-cover::after {
-      /* 一根淡金竖线装饰，更杂志感 */
+    .text-cover::after {
       content: ''; position: absolute; left: 0; top: 18px; bottom: 18px;
       width: 2px; background: linear-gradient(180deg, transparent, var(--accent), transparent);
       opacity: 0.7;
     }
+    /* 有图卡片：text-cover 放在底层作为 fallback，img 覆盖其上 */
+    .card-cover > .text-cover { position: absolute; inset: 0; z-index: 0; }
+    .card-cover > img { position: relative; z-index: 1; }
+    .card-cover > .source-tag { z-index: 2; }
     .text-cover-tag {
       font-size: 10.5px; color: var(--accent-bright); font-weight: 700;
       letter-spacing: 2.5px; text-transform: uppercase;
@@ -903,25 +907,30 @@
     }
 
     function getCardCover(n) {
-      // ✅ 有真实图：直接用图 + 来源角标
-      if (n.cover && /^https?:\/\//.test(n.cover)) {
-        return `<div class="card-cover">
-          <img src="${escapeHtml(n.cover)}" loading="lazy" onerror="this.style.display='none';this.parentElement.dataset.failed='1';">
-          <span class="source-tag">${escapeHtml(n.source)}</span>
-        </div>`;
-      }
-      // ❌ 无真实图：用杂志风文字封面（金色渐变 + 大字标题）
       const cat = categoryOf(n);
       const title = n.title || '（无标题）';
       const shortTitle = title.length > 50 ? title.slice(0, 50) + '…' : title;
-      return `<div class="card-cover text-cover">
+
+      // 文字封面 DOM（无图卡片直接用；有图卡片当 fallback 放底层，图加载失败时露出来）
+      const textCoverInner = `
         <div class="text-cover-tag">${escapeHtml(cat)}</div>
         <div class="text-cover-title">${escapeHtml(shortTitle)}</div>
         <div class="text-cover-foot">
           <span>${escapeHtml(n.source)}</span>
           ${n.hot ? `<span>🔥 ${formatHot(n.hot)}</span>` : ''}
         </div>
-      </div>`;
+      `;
+
+      // ✅ 有真实图：图叠在 text-cover 上面；加载失败时 img 隐藏，露出文字封面
+      if (n.cover && /^https?:\/\//.test(n.cover)) {
+        return `<div class="card-cover">
+          <div class="text-cover">${textCoverInner}</div>
+          <img src="${escapeHtml(n.cover)}" loading="lazy" onerror="this.style.display='none'">
+          <span class="source-tag">${escapeHtml(n.source)}</span>
+        </div>`;
+      }
+      // ❌ 无真实图：直接用文字封面
+      return `<div class="card-cover text-cover">${textCoverInner}</div>`;
     }
 
     function timeAgo(iso) {
