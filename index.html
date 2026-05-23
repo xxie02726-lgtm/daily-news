@@ -549,10 +549,46 @@
       background: var(--card-bg); border-top: 1px solid var(--border-soft);
     }
 
+    /* 移动端分类标签栏 - 桌面端默认隐藏 */
+    .mobile-tabs {
+      display: none;
+      padding: 10px 14px;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
+    }
+    .mobile-tabs::-webkit-scrollbar { display: none; }
+    .mobile-tab {
+      flex-shrink: 0;
+      padding: 7px 14px;
+      background: var(--bg-deep);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mobile-tab.active {
+      background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+      color: var(--bg-deep);
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(212,165,116,0.3);
+    }
+
     @media (max-width: 768px) {
       .app { grid-template-columns: 1fr; }
       .sidebar { display: none; }
+      .mobile-tabs { display: flex; }
       .ai-chat { right: 12px; bottom: 12px; left: 12px; width: auto; }
+      .main-header { padding: 14px 16px; gap: 10px; flex-wrap: wrap; }
+      .main-header h2 { font-size: 18px; }
+      .main-header .subtitle { display: none; }   /* 手机端不显示副标题节省空间 */
+      .content { padding: 16px; }
+      .grid-view { grid-template-columns: 1fr; }  /* 手机端单列 */
     }
   </style>
 </head>
@@ -609,6 +645,16 @@
             <button class="view-btn" data-view="list">☰ 列表</button>
           </div>
         </div>
+      </div>
+
+      <!-- 移动端分类标签栏（桌面端隐藏，<768px 时显示）-->
+      <div class="mobile-tabs">
+        <button class="mobile-tab active" data-cat="ai">✨ AI 精选</button>
+        <button class="mobile-tab" data-cat="all">📋 全部</button>
+        <button class="mobile-tab" data-cat="国内科技">💡 国内科技</button>
+        <button class="mobile-tab" data-cat="国外科技">🚀 国外科技</button>
+        <button class="mobile-tab" data-cat="商业">💰 商业</button>
+        <button class="mobile-tab" data-cat="时政">🌍 时政</button>
       </div>
 
       <div class="status-bar" id="status"></div>
@@ -951,7 +997,8 @@
 
     function setCategory(cat) {
       currentCat = cat;
-      document.querySelectorAll(".nav-item").forEach(item => {
+      // 同时更新桌面侧边栏 + 移动端分类标签的高亮状态
+      document.querySelectorAll(".nav-item, .mobile-tab").forEach(item => {
         item.classList.toggle("active", item.dataset.cat === cat);
       });
       const titleMap = {
@@ -1278,7 +1325,7 @@ ${newsListText}`;
     }
 
     // ===== 事件绑定 =====
-    document.querySelectorAll(".nav-item").forEach(item => {
+    document.querySelectorAll(".nav-item, .mobile-tab").forEach(item => {
       item.addEventListener("click", () => setCategory(item.dataset.cat));
     });
     document.querySelectorAll(".view-btn").forEach(btn => {
