@@ -1,0 +1,9 @@
+{
+  "name": "daily-news",
+  "version": "1.0.0",
+  "description": "每日新闻精选 - 自动抓取主流热点 + AI 精选",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

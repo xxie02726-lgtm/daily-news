@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>每日新闻精选</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      /* 火煙灰金 - 文艺杂志风 */
+      --bg: #221d18;              /* 火煙灰底，温暖深棕 */
+      --bg-deep: #1a1612;         /* 更深一层 */
+      --sidebar-bg: #1e1914;
+      --card-bg: #2a2420;
+      --card-bg-hover: #322c26;
+      --border: #3a322a;
+      --border-soft: #2e2823;
+      --text: #ebe1d0;            /* 暖米白 */
+      --text-secondary: #b8a892;
+      --text-muted: #7a6e5f;
+      --accent: #d4a574;          /* 玫瑰金 */
+      --accent-bright: #e8c294;   /* 亮玫瑰金 */
+      --accent-deep: #b8895a;     /* 深玫瑰金 */
+      --accent-soft: #3a2f24;     /* 金色暗背景 */
+      --hover: #322c26;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4);
+      --shadow-hover: 0 8px 24px rgba(0,0,0,0.55);
+      --shadow-gold: 0 0 0 1px rgba(212,165,116,0.15);
+    }
+    body {
+      font-family: -apple-system, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow: hidden;
+      height: 100vh;
+    }
+    .app { display: grid; grid-template-columns: 240px 1fr; height: 100vh; }
+    .sidebar {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .sidebar-header { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+    .sidebar-header .logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .sidebar-header .date { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .sidebar-section { padding: 12px 10px; }
+    .sidebar-section-title {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 6px 10px; margin-bottom: 4px;
+    }
+    .nav-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      transition: background 0.15s; font-size: 14px; margin-bottom: 2px;
+    }
+    .nav-item:hover { background: var(--hover); }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .nav-item .nav-left { display: flex; align-items: center; gap: 10px; }
+    .nav-item .nav-icon { font-size: 16px; }
+    .nav-item .count {
+      font-size: 11px; color: var(--text-muted); background: var(--hover);
+      padding: 2px 8px; border-radius: 10px; min-width: 24px; text-align: center;
+    }
+    .nav-item.active .count { background: var(--accent); color: white; }
+    .ai-pick-nav { background: linear-gradient(135deg, #fff8e1, #ffe0b2); color: #c66900; font-weight: 600; }
+    .ai-pick-nav:hover { background: linear-gradient(135deg, #ffeec2, #ffd699); }
+
+    .main { display: flex; flex-direction: column; overflow: hidden; }
+    .main-header {
+      padding: 18px 28px; border-bottom: 1px solid var(--border); background: var(--sidebar-bg);
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .main-header h2 { color: var(--text); letter-spacing: 0.3px; }
+    .main-header .subtitle { color: var(--text-muted); }
+    .main-header h2 { font-size: 20px; font-weight: 700; }
+    .main-header .subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+    .btn-refresh {
+      padding: 8px 14px; background: var(--accent); color: white;
+      border: none; border-radius: 8px; cursor: pointer; font-size: 13px;
+      font-weight: 500; transition: opacity 0.15s;
+    }
+    .btn-refresh:hover { opacity: 0.85; }
+    .btn-refresh:disabled { opacity: 0.5; cursor: wait; }
+    .btn-ai {
+      background: linear-gradient(135deg, #c66900, #ff9500);
+      box-shadow: 0 2px 8px rgba(255,149,0,0.3);
+    }
+    .view-switcher { display: flex; gap: 4px; background: var(--bg-deep); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+    .view-btn { padding: 6px 12px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text-muted); transition: all 0.15s; }
+    .view-btn:hover { color: var(--text-secondary); }
+    .view-btn.active { background: var(--accent-soft); color: var(--accent-bright); }
+
+    /* 状态条 - 深色化 */
+    .status-bar {
+      padding: 10px 28px; font-size: 13px;
+      background: var(--card-bg); border-bottom: 1px solid var(--border);
+      color: var(--text-secondary); display: none;
+    }
+    .status-bar.show { display: block; }
+    .status-bar.info { background: #1f2a35; color: #8fc7f5; border-bottom-color: #2c3f54; }
+    .status-bar.success { background: #1f3a2a; color: #a8d8b0; border-bottom-color: #2c5840; }
+    .status-bar.error { background: #3a1f1f; color: #f5a8a8; border-bottom-color: #5a2c2c; }
+    .status-bar pre {
+      margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px;
+      max-height: 200px; overflow: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px;
+      white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);
+    }
+
+    .content { flex: 1; overflow-y: auto; padding: 24px 28px; }
+
+    .grid-view {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px;
+    }
+    .news-card {
+      background: var(--card-bg); border-radius: 14px; overflow: hidden;
+      cursor: pointer; box-shadow: var(--shadow); border: 1px solid var(--border-soft);
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      display: flex; flex-direction: column;
+    }
+    .news-card:hover {
+      transform: translateY(-3px); box-shadow: var(--shadow-hover);
+      border-color: rgba(212,165,116,0.35);   /* hover 时金色微光边框 */
+    }
+    .card-cover {
+      width: 100%; aspect-ratio: 16/9;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 36px; position: relative; overflow: hidden;
+    }
+    .card-cover.theme-2 { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .card-cover.theme-3 { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+    .card-cover.theme-4 { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+    .card-cover.theme-5 { background: linear-gradient(135deg, #fa709a, #fee140); }
+    .card-cover.theme-6 { background: linear-gradient(135deg, #30cfd0, #330867); }
+    .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* 杂志风文字封面（无真图时使用）—— 像 New Yorker 那种 */
+    .card-cover.text-cover {
+      flex-direction: column; justify-content: space-between; align-items: stretch;
+      padding: 18px 18px 16px; text-align: left;
+      background: linear-gradient(135deg, #2a2420 0%, #3a2f24 50%, #1e1914 100%);
+      position: relative; overflow: hidden;
+    }
+    .card-cover.text-cover::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at 85% 15%, rgba(212,165,116,0.22), transparent 55%),
+                  radial-gradient(circle at 10% 90%, rgba(212,165,116,0.10), transparent 50%);
+      pointer-events: none;
+    }
+    .card-cover.text-cover::after {
+      /* 一根淡金竖线装饰，更杂志感 */
+      content: ''; position: absolute; left: 0; top: 18px; bottom: 18px;
+      width: 2px; background: linear-gradient(180deg, transparent, var(--accent), transparent);
+      opacity: 0.7;
+    }
+    .text-cover-tag {
+      font-size: 10.5px; color: var(--accent-bright); font-weight: 700;
+      letter-spacing: 2.5px; text-transform: uppercase;
+      position: relative; z-index: 1;
+    }
+    .text-cover-title {
+      font-size: 19px; font-weight: 700; line-height: 1.32;
+      letter-spacing: 0.2px; color: var(--text);
+      font-family: "PingFang SC", "Georgia", serif;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+      overflow: hidden; position: relative; z-index: 1;
+      margin-top: 6px;
+    }
+    .text-cover-foot {
+      font-size: 11px; color: var(--text-muted);
+      position: relative; z-index: 1;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    /* 热榜专属封面（按平台主题色）*/
+    .card-cover.hot-cover {
+      flex-direction: column;
+      padding: 16px;
+      text-align: center;
+      position: relative;
+    }
+    .hot-cover .hot-rank {
+      font-size: 52px; font-weight: 800;
+      font-family: 'Courier New', 'SF Mono', Consolas, monospace;
+      line-height: 1; letter-spacing: -2px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    }
+    .hot-cover .hot-platform {
+      font-size: 14px; font-weight: 600;
+      margin-top: 8px; letter-spacing: 1px;
+    }
+    .hot-cover .hot-num {
+      font-size: 12px; opacity: 0.9;
+      margin-top: 6px;
+    }
+    /* 全网热搜系 */
+    .hot-cover.hot-weibo   { background: linear-gradient(135deg, #E6162D 0%, #FF5252 100%); color: white; }
+    .hot-cover.hot-baidu   { background: linear-gradient(135deg, #2932E1 0%, #6B7AFF 100%); color: white; }
+    .hot-cover.hot-douyin  { background: linear-gradient(135deg, #161823 0%, #444 100%); color: #fe2c55; }
+    .hot-cover.hot-zhihu   { background: linear-gradient(135deg, #056de8 0%, #4FA3FF 100%); color: white; }
+    .hot-cover.hot-bili    { background: linear-gradient(135deg, #FB7299 0%, #FE9BBE 100%); color: white; }
+    .hot-cover.hot-toutiao { background: linear-gradient(135deg, #FF3B30 0%, #FF7B5C 100%); color: white; }
+    /* 科技系 */
+    .hot-cover.hot-itHome  { background: linear-gradient(135deg, #E10C0C 0%, #FF5252 100%); color: white; }
+    .hot-cover.hot-kr36    { background: linear-gradient(135deg, #1a1a1a 0%, #444 100%); color: #ffe066; }
+    .hot-cover.hot-huxiu   { background: linear-gradient(135deg, #F8B500 0%, #FFD740 100%); color: #1a1a1a; }
+    .hot-cover.hot-ifanr   { background: linear-gradient(135deg, #00AEAE 0%, #44D5D5 100%); color: white; }
+    .hot-cover.hot-sspai   { background: linear-gradient(135deg, #D62828 0%, #F77F00 100%); color: white; }
+    /* 财经系 */
+    .hot-cover.hot-juejin  { background: linear-gradient(135deg, #1E80FF 0%, #5BA8FF 100%); color: white; }
+    /* 时事系 */
+    .hot-cover.hot-paper   { background: linear-gradient(135deg, #1a1a1a 0%, #BB1B2C 100%); color: white; }
+    .hot-cover.hot-netease { background: linear-gradient(135deg, #C20C0C 0%, #E83737 100%); color: white; }
+    .hot-cover.hot-tencent { background: linear-gradient(135deg, #006EFF 0%, #4FA3FF 100%); color: white; }
+    .hot-cover.hot-sina    { background: linear-gradient(135deg, #E60012 0%, #FF5252 100%); color: white; }
+
+    /* 卡片右上角热度角标（如果不是热榜专属封面，但有热度数）*/
+    .hot-badge {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(255,107,53,0.95); color: white;
+      font-size: 11px; font-weight: 600;
+      padding: 3px 8px; border-radius: 10px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* SEC 美股年报专属封面 */
+    .card-cover.sec-cover {
+      background: linear-gradient(135deg, #1a2980 0%, #26d0ce 100%);
+      flex-direction: column;
+      padding: 16px;
+      font-size: 14px;
+      text-align: center;
+      position: relative;
+    }
+    .sec-cover::before {
+      content: '$';
+      position: absolute;
+      top: 8px; right: 14px;
+      font-size: 28px; font-weight: 800;
+      color: rgba(255,255,255,0.15);
+      font-family: Georgia, serif;
+    }
+    .sec-cover .sec-type {
+      font-size: 36px; font-weight: 800;
+      letter-spacing: 3px;
+      font-family: 'Courier New', 'SF Mono', Consolas, monospace;
+      margin-bottom: 6px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+    .sec-cover .sec-company {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      line-height: 1.4; opacity: 0.92;
+      max-width: 100%;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .sec-cover .sec-label {
+      margin-top: 8px;
+      font-size: 10px;
+      opacity: 0.8;
+      letter-spacing: 1px;
+    }
+    .card-cover .source-tag {
+      position: absolute; bottom: 10px; left: 12px;
+      background: rgba(0,0,0,0.5); color: white;
+      font-size: 11px; padding: 3px 8px; border-radius: 4px; backdrop-filter: blur(8px);
+    }
+    .card-body { padding: 14px 16px 16px; flex: 1; display: flex; flex-direction: column; }
+    .card-title {
+      font-size: 15px; font-weight: 600; line-height: 1.45; margin-bottom: 8px;
+      color: var(--text);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .news-card:hover .card-title { color: var(--accent-bright); }
+    .card-summary {
+      font-size: 13px; color: var(--text-secondary); flex: 1;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; margin-bottom: 10px;
+    }
+    .card-meta {
+      font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between;
+      padding-top: 8px; border-top: 1px solid var(--border-soft);
+    }
+
+    .list-view {
+      display: flex; flex-direction: column; gap: 2px;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; box-shadow: var(--shadow);
+    }
+    .list-item {
+      padding: 14px 18px; cursor: pointer;
+      border-bottom: 1px solid var(--border-soft); transition: background 0.15s;
+      display: flex; gap: 14px; align-items: flex-start;
+    }
+    .list-item:last-child { border-bottom: none; }
+    .list-item:hover { background: var(--hover); }
+    .list-item:hover .list-title { color: var(--accent-bright); }
+    .list-item .list-title { color: var(--text); }
+    .list-item .list-thumb {
+      width: 80px; height: 60px; border-radius: 6px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 22px;
+    }
+    .list-item .list-content { flex: 1; min-width: 0; }
+    .list-item .list-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .list-item .list-summary {
+      font-size: 13px; color: var(--text-secondary);
+      display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+      overflow: hidden; margin-bottom: 6px;
+    }
+    .list-item .list-meta { font-size: 12px; color: var(--text-muted); }
+
+    .ai-banner {
+      background: linear-gradient(135deg, #3a2f24, #4a3f30);
+      border: 1px solid rgba(212,165,116,0.3);
+      border-radius: 14px; padding: 16px 20px; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 0 30px rgba(212,165,116,0.08);
+    }
+    .ai-banner-icon { font-size: 28px; filter: drop-shadow(0 0 6px rgba(212,165,116,0.5)); }
+    .ai-banner-text h3 { font-size: 15px; color: var(--accent-bright); }
+    .ai-banner-text p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 16px; max-width: 720px; width: 100%;
+      max-height: 85vh; overflow-y: auto; padding: 32px 36px; position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px;
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--hover); border: none; cursor: pointer;
+      font-size: 18px; color: var(--text-secondary);
+    }
+    .modal-close:hover { background: var(--accent-soft); color: var(--accent-bright); }
+    .modal h2 { font-size: 24px; font-weight: 700; margin-bottom: 12px; padding-right: 40px; color: var(--text); }
+    .modal-meta {
+      font-size: 13px; color: var(--text-muted); margin-bottom: 20px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .modal-body { font-size: 15px; line-height: 1.8; color: var(--text-secondary); }
+    .modal-body img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; }
+    .modal-footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .modal-link-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; background: var(--accent); color: var(--bg-deep);
+      text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+    }
+    .modal-link-btn:hover { background: var(--accent-bright); }
+
+    .empty-tip {
+      text-align: center; padding: 60px 20px; color: var(--text-muted);
+    }
+    .empty-tip h3 { font-size: 16px; margin-bottom: 8px; color: var(--text-secondary); }
+
+    .sidebar::-webkit-scrollbar, .content::-webkit-scrollbar { width: 6px; }
+    .sidebar::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+    /* ========== AI 助手浮动按钮 + 聊天面板（火煙灰金风）========== */
+    .ai-fab {
+      position: fixed; right: 24px; bottom: 24px;
+      width: 64px; height: 64px; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #e8c294, #b8895a 70%, #8a6440 100%);
+      color: var(--bg-deep); font-size: 30px; border: 2px solid rgba(232,194,148,0.6);
+      cursor: pointer;
+      box-shadow: 0 8px 28px rgba(184,137,90,0.5), 0 0 0 4px rgba(212,165,116,0.1);
+      z-index: 99;
+      display: flex; align-items: center; justify-content: center;
+      animation: aiBreathe 4s ease-in-out infinite;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .ai-fab:hover {
+      transform: scale(1.12) rotate(-8deg);
+      box-shadow: 0 12px 36px rgba(212,165,116,0.7), 0 0 0 6px rgba(212,165,116,0.15);
+      animation-play-state: paused;
+    }
+    .ai-fab.hide { display: none; }
+    .ai-fab.blink { animation: aiBlink 0.4s ease-in-out; }
+    .ai-fab.thinking { animation: aiThinking 1.2s linear infinite; background: radial-gradient(circle at 30% 30%, #f0d4a0, #c8a070 70%); }
+    .ai-fab.excited { animation: aiExcited 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .ai-fab.alert::before {
+      content: ''; position: absolute; top: -2px; right: -2px;
+      width: 14px; height: 14px; background: #e85a5a; border-radius: 50%;
+      border: 2px solid var(--bg); animation: aiAlertPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes aiBreathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+    @keyframes aiBlink {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(0.15); }
+    }
+    @keyframes aiThinking {
+      0% { transform: rotate(0); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes aiExcited {
+      0%, 100% { transform: scale(1) rotate(0); }
+      25% { transform: scale(1.2) rotate(-15deg); }
+      50% { transform: scale(1.15) rotate(15deg); }
+      75% { transform: scale(1.2) rotate(-10deg); }
+    }
+    @keyframes aiAlertPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.3); }
+    }
+
+    /* AI 主动提示气泡 */
+    .ai-tip-bubble {
+      position: fixed; right: 100px; bottom: 32px;
+      max-width: 280px; padding: 12px 16px;
+      background: var(--card-bg); border: 1px solid rgba(212,165,116,0.4);
+      border-radius: 12px; font-size: 13px; color: var(--text);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(212,165,116,0.1);
+      z-index: 98; cursor: pointer;
+      animation: aiTipIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: none;
+    }
+    .ai-tip-bubble.show { display: block; }
+    .ai-tip-bubble::after {
+      content: ''; position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
+      width: 0; height: 0; border: 8px solid transparent;
+      border-left-color: rgba(212,165,116,0.4);
+    }
+    .ai-tip-close {
+      position: absolute; top: 4px; right: 6px; width: 18px; height: 18px;
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1;
+    }
+    @keyframes aiTipIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .ai-chat {
+      position: fixed; right: 24px; bottom: 24px;
+      width: 400px; max-width: calc(100vw - 48px);
+      height: 600px; max-height: calc(100vh - 48px);
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(212,165,116,0.08);
+      z-index: 100; display: none;
+      flex-direction: column; overflow: hidden;
+    }
+    .ai-chat.show { display: flex; animation: aiChatIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes aiChatIn {
+      from { opacity: 0; transform: scale(0.9) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .ai-chat-header {
+      padding: 16px 18px;
+      background: linear-gradient(135deg, #3a2f24 0%, #4a3f30 100%);
+      border-bottom: 1px solid rgba(212,165,116,0.25);
+      color: var(--accent-bright);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .ai-chat-header h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; letter-spacing: 0.3px; }
+    .ai-chat-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(212,165,116,0.15); color: var(--accent-bright);
+      border: none; cursor: pointer; font-size: 14px;
+    }
+    .ai-chat-close:hover { background: rgba(212,165,116,0.3); }
+
+    .ai-chat-messages {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+      background: var(--bg-deep);
+    }
+    .ai-chat-messages::-webkit-scrollbar { width: 6px; }
+    .ai-chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .ai-msg {
+      max-width: 85%; padding: 11px 15px; border-radius: 14px;
+      font-size: 14px; line-height: 1.6; word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .ai-msg-bot {
+      background: var(--card-bg); color: var(--text);
+      align-self: flex-start; border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .ai-msg-user {
+      background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+      color: var(--bg-deep); align-self: flex-end; font-weight: 500;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 8px rgba(212,165,116,0.2);
+    }
+    .ai-msg-streaming::after {
+      content: '▊'; color: var(--accent-bright); animation: aiCursor 0.8s steps(1) infinite;
+      margin-left: 2px;
+    }
+    @keyframes aiCursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .ai-msg-loading {
+      display: flex; gap: 5px; padding: 14px;
+    }
+    .ai-msg-loading span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); animation: aiDot 1.2s infinite;
+    }
+    .ai-msg-loading span:nth-child(2) { animation-delay: 0.2s; }
+    .ai-msg-loading span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes aiDot { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.85); } 30% { opacity: 1; transform: scale(1.1); } }
+
+    .ai-chat-input-wrap {
+      padding: 12px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; align-items: flex-end;
+      background: var(--card-bg);
+    }
+    .ai-chat-input {
+      flex: 1; min-height: 40px; max-height: 100px;
+      padding: 10px 13px; background: var(--bg-deep);
+      border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; font-size: 14px; font-family: inherit;
+      resize: none; outline: none; line-height: 1.4;
+      transition: border-color 0.2s;
+    }
+    .ai-chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(212,165,116,0.1); }
+    .ai-chat-input::placeholder { color: var(--text-muted); }
+    .ai-chat-send {
+      padding: 10px 18px;
+      background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+      color: var(--bg-deep); border: none; border-radius: 10px;
+      cursor: pointer; font-size: 14px; font-weight: 600;
+      transition: transform 0.15s;
+    }
+    .ai-chat-send:hover { transform: translateY(-1px); }
+    .ai-chat-send:disabled { opacity: 0.4; cursor: wait; transform: none; }
+    .ai-chat-tip {
+      padding: 8px 16px; font-size: 11px;
+      color: var(--text-muted); text-align: center;
+      background: var(--card-bg); border-top: 1px solid var(--border-soft);
+    }
+
+    @media (max-width: 768px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .ai-chat { right: 12px; bottom: 12px; left: 12px; width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">📰 每日新闻</div>
+        <div class="date" id="today"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">精选</div>
+        <div class="nav-item ai-pick-nav active" data-cat="ai">
+          <div class="nav-left"><span class="nav-icon">✨</span><span>今日 AI 精选</span></div>
+          <span class="count" id="count-ai">0</span>
+        </div>
+        <div class="nav-item" data-cat="all">
+          <div class="nav-left"><span class="nav-icon">📋</span><span>全部新闻</span></div>
+          <span class="count" id="count-all">0</span>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">了解世界</div>
+        <div class="nav-item" data-cat="国内科技">
+          <div class="nav-left"><span class="nav-icon">💡</span><span>国内科技</span></div>
+          <span class="count" id="count-国内科技">0</span>
+        </div>
+        <div class="nav-item" data-cat="国外科技">
+          <div class="nav-left"><span class="nav-icon">🚀</span><span>国外科技</span></div>
+          <span class="count" id="count-国外科技">0</span>
+        </div>
+        <div class="nav-item" data-cat="商业">
+          <div class="nav-left"><span class="nav-icon">💰</span><span>商业 / 财经</span></div>
+          <span class="count" id="count-商业">0</span>
+        </div>
+        <div class="nav-item" data-cat="时政">
+          <div class="nav-left"><span class="nav-icon">🌍</span><span>时政 / 国际</span></div>
+          <span class="count" id="count-时政">0</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-header">
+        <div>
+          <h2 id="page-title">今日 AI 精选</h2>
+          <div class="subtitle" id="page-subtitle">AI 每天从全部新闻中挑出最值得看的几条</div>
+        </div>
+        <div class="header-actions">
+          <button class="btn-refresh btn-ai" id="btn-ai">✨ 让 AI 精选</button>
+          <button class="btn-refresh" id="btn-fetch">📥 立即抓取新闻</button>
+          <div class="view-switcher">
+            <button class="view-btn active" data-view="grid">⊞ 网格</button>
+            <button class="view-btn" data-view="list">☰ 列表</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-bar" id="status"></div>
+
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <!-- ===== AI 助手浮动按钮 ===== -->
+  <button class="ai-fab" id="ai-fab" title="问问 AI 助手">🤖</button>
+
+  <!-- AI 主动提示气泡 -->
+  <div class="ai-tip-bubble" id="ai-tip-bubble">
+    <button class="ai-tip-close" onclick="event.stopPropagation();document.getElementById('ai-tip-bubble').classList.remove('show');">✕</button>
+    <span id="ai-tip-text">有想问我的吗？点这里聊聊 →</span>
+  </div>
+
+  <!-- ===== AI 助手聊天面板 ===== -->
+  <div class="ai-chat" id="ai-chat">
+    <div class="ai-chat-header">
+      <h3>🤖 AI 助手 (DeepSeek)</h3>
+      <button class="ai-chat-close" id="ai-chat-close" title="关闭">✕</button>
+    </div>
+    <div class="ai-chat-messages" id="ai-chat-messages">
+      <div class="ai-msg ai-msg-bot">你好👋 我是基于 DeepSeek 的 AI 助手。你可以：
+• 问我新闻里某条的背景、解读
+• 请我推荐相关阅读
+• 让我帮你总结某类话题
+• 问我任何其他问题（生活、学习、工作）
+
+直接开聊吧～</div>
+    </div>
+    <div class="ai-chat-input-wrap">
+      <textarea class="ai-chat-input" id="ai-chat-input" placeholder="输入你的问题，回车发送..." rows="1"></textarea>
+      <button class="ai-chat-send" id="ai-chat-send">发送</button>
+    </div>
+    <div class="ai-chat-tip">由 DeepSeek 提供 · 回答仅供参考</div>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <h2 id="modal-title"></h2>
+      <div class="modal-meta" id="modal-meta"></div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <a id="modal-link" class="modal-link-btn" target="_blank">阅读原文 →</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Supabase 配置（Tokyo region，部署在用户 xxie02726-lgtm 的 Supabase 账号下）=====
+    const SUPABASE_URL = "https://jtjuvefisqrwuilrmyva.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0anV2ZWZpc3Fyd3VpbHJteXZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MTE5NTEsImV4cCI6MjA5NTA4Nzk1MX0.Bd8uitbYWCUtcyq59Ut6ZaOlO96HUkasKQYB4UjG64I"; // anon JWT，设计就是公开的
+
+    let sb;  // Supabase client
+    let ALL_NEWS = []; // 真实数据（启动时从云数据库读，没有就用假数据保底）
+
+    // ===== DeepSeek API Key（全家共用，请在 DeepSeek 后台设置月度消费上限保护钱包）=====
+    const DEEPSEEK_API_KEY = 'sk-3874854c210b471ca4dd43aff752a61c';
+
+    // ===== 热榜聚合 API（DailyHot 简化版，只保留有知识价值的源，删除娱乐源）=====
+    const HOT_API_BASE = 'https://news-hot-api.vercel.app';
+    const HOTLISTS = [
+      // 💡 科技热门（中文）
+      { api: HOT_API_BASE + '/ithome',       source: 'IT之家',     cat: '科技', color: 'itHome'  },
+      { api: HOT_API_BASE + '/ifanr',        source: '爱范儿',     cat: '科技', color: 'ifanr'   },
+      { api: HOT_API_BASE + '/sspai',        source: '少数派',     cat: '科技', color: 'sspai'   },
+      // 💰 财经/商业深度
+      { api: HOT_API_BASE + '/36kr',         source: '36氪',       cat: '财经', color: 'kr36'    },
+      { api: HOT_API_BASE + '/huxiu',        source: '虎嗅',       cat: '财经', color: 'huxiu'   },
+      { api: HOT_API_BASE + '/juejin',       source: '掘金',       cat: '财经', color: 'juejin'  },
+      // 🌍 时事深度（保留主流大媒体）
+      { api: HOT_API_BASE + '/thepaper',     source: '澎湃新闻',   cat: '时事', color: 'paper'   },
+      { api: HOT_API_BASE + '/qq-news',      source: '腾讯新闻',   cat: '时事', color: 'tencent' },
+      { api: HOT_API_BASE + '/sina-news',    source: '新浪新闻',   cat: '时事', color: 'sina'    },
+    ];
+
+    // ===== RSS 源（国外硬核知识源 + 财经 + 美股）=====
+    const FEEDS = [
+      // 🌍 国际时政（中文）
+      { url: 'https://feeds.bbci.co.uk/zhongwen/simp/rss.xml',  source: 'BBC 中文',     cat: '时事' },
+      { url: 'https://rss.dw.com/rdf/rss-chi-all',              source: 'DW 德国之声',  cat: '时事' },
+      // 💡 国外科技（英文，AI 助手可翻译）
+      { url: 'https://news.ycombinator.com/rss',                source: 'HackerNews',   cat: '科技' },
+      { url: 'https://techcrunch.com/feed/',                    source: 'TechCrunch',   cat: '科技' },
+      { url: 'https://www.theverge.com/rss/index.xml',          source: 'The Verge',    cat: '科技' },
+      // 💰 美股 / 财报
+      { url: 'https://finance.yahoo.com/news/rssindex',         source: 'Yahoo Finance', cat: '财经' },
+    ];
+
+    // 解析热度字符串为数字（"12.3万" → 123000）
+    function parseHot(h) {
+      if (h == null) return 0;
+      if (typeof h === 'number') return h;
+      const s = String(h).replace(/[,\s]/g, '');
+      const num = parseFloat(s) || 0;
+      if (s.includes('亿')) return num * 100000000;
+      if (s.includes('万') || s.includes('w') || s.includes('W')) return num * 10000;
+      if (s.includes('k') || s.includes('K')) return num * 1000;
+      return num;
+    }
+    // 把数字格式化为可读热度（123456 → "12.3万"）
+    function formatHot(n) {
+      if (!n || n <= 0) return '';
+      if (n >= 100000000) return (n/100000000).toFixed(1) + '亿';
+      if (n >= 10000) return (n/10000).toFixed(1) + '万';
+      if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+      return Math.round(n).toString();
+    }
+
+    function strHash(s) {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+      return Math.abs(h).toString(36);
+    }
+    function stripHtmlText(html) {
+      return String(html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    }
+    function pickFirstImg(html) {
+      const m = String(html || '').match(/<img[^>]+src=["']([^"'>]+)["']/i);
+      return m ? m[1] : '';
+    }
+    // 综合多种字段提取封面图（覆盖 rss2json 各种返回结构）
+    function getBestCover(item) {
+      // 1. rss2json 直接提供的 thumbnail
+      if (item.thumbnail && /^https?:/.test(item.thumbnail)) return item.thumbnail;
+      // 2. enclosure 字段（可能是对象、字符串、数组）
+      if (item.enclosure) {
+        const enc = item.enclosure;
+        if (typeof enc === 'string' && /^https?:/.test(enc)) return enc;
+        if (Array.isArray(enc) && enc[0]) {
+          const first = enc[0];
+          if (typeof first === 'string') return first;
+          if (first.link || first.url) return first.link || first.url;
+        }
+        if (typeof enc === 'object' && (enc.link || enc.url)) return enc.link || enc.url;
+      }
+      // 3. media:content / mediaContent
+      const mc = item['media:content'] || item.mediaContent;
+      if (mc && (mc.url || mc.link)) return mc.url || mc.link;
+      // 4. 从 content / description 里抓第一张 img
+      const html = item.content || item.description || item['content:encoded'] || '';
+      return pickFirstImg(html);
+    }
+    // 字段名映射：JS camelCase → Postgres snake_case（Supabase 推荐 snake_case）
+    function toDbRow(doc) {
+      return {
+        cat:        doc.cat,
+        source:     doc.source,
+        color:      doc.color || '',
+        title:      doc.title,
+        link:       doc.link,
+        summary:    doc.summary,
+        content:    doc.content,
+        cover:      doc.cover || '',
+        hot:        doc.hot || 0,
+        rank:       doc.rank || 0,
+        is_hot:     !!doc.isHot,
+        is_ai:      !!doc.isAI,
+        ai_reason:  doc.aiReason || '',
+        pub_date:   doc.pubDate,
+        fetched_at: doc.fetchedAt || new Date().toISOString(),
+        hash:       doc.hash,
+      };
+    }
+    // 反向映射：从数据库读出来后转回 camelCase（保持前端代码逻辑不变）
+    function fromDbRow(row) {
+      return {
+        _id:       row.id,
+        cat:       row.cat,
+        source:    row.source,
+        color:     row.color,
+        title:     row.title,
+        link:      row.link,
+        summary:   row.summary,
+        content:   row.content,
+        cover:     row.cover,
+        hot:       row.hot,
+        rank:      row.rank,
+        isHot:     row.is_hot,
+        isAI:      row.is_ai,
+        aiReason:  row.ai_reason,
+        pubDate:   row.pub_date,
+        fetchedAt: row.fetched_at,
+        hash:      row.hash,
+      };
+    }
+    // 写入一条记录（自动去重：hash 字段是 unique，重复会报错并被吞掉）
+    async function dbAdd(coll, doc) {
+      const { error } = await sb.from(coll).insert([toDbRow(doc)]);
+      if (error && !String(error.message).includes('duplicate')) throw error;
+    }
+
+    // ===== 假数据（保底用：第一次还没抓到真新闻时显示）=====
+    const DEMO_NEWS = [
+      { _id: 'demo1', cat: "科技", title: "👋 这里是占位假新闻 - 点「立即抓取新闻」按钮开始抓真新闻", source: "演示数据", pubDate: new Date().toISOString(), summary: "目前数据库还没有新闻，点右上角橙色按钮触发云函数 fetchNews 抓一次。", content: "占位内容", cover: "", link: "#", isAI: true, theme: 1 },
+    ];
+
+    // 给每条新闻分配一个主题色（用 hash 决定）
+    function themeFor(s) {
+      let h = 0; for (let i = 0; i < s.length; i++) h = h * 31 + s.charCodeAt(i);
+      return Math.abs(h) % 6 + 1;
+    }
+    function iconFor(cat) {
+      return {
+        '国内科技': '💡', '国外科技': '🚀', '商业': '💰', '时政': '🌍',
+        '热搜': '🔥', '科技': '💡', '时事': '🌍', '财经': '💰', '编程': '💻', '股票': '📈'
+      }[cat] || '📰';
+    }
+
+    // 按"知识价值"重新映射来源到分类（覆盖数据库里的旧 cat 字段）
+    function categoryOf(n) {
+      const s = n.source || '';
+      if (['IT之家', '爱范儿', '少数派'].includes(s)) return '国内科技';
+      if (['HackerNews', 'TechCrunch', 'The Verge'].includes(s)) return '国外科技';
+      if (['36氪', '虎嗅', '掘金', 'Yahoo Finance'].includes(s)) return '商业';
+      if (['BBC 中文', 'DW 德国之声', '澎湃新闻', '腾讯新闻', '新浪新闻'].includes(s)) return '时政';
+      return n.cat || '其他';
+    }
+
+    let currentCat = "ai";
+    let currentView = "grid";
+
+    // 全部显示（无图的用杂志风文字封面，不再过滤）
+    function getNewsList() {
+      if (currentCat === "ai") return ALL_NEWS.filter(n => n.isAI);
+      if (currentCat === "all") return ALL_NEWS;
+      return ALL_NEWS.filter(n => categoryOf(n) === currentCat);
+    }
+
+    function renderDate() {
+      const d = new Date();
+      const w = ["日","一","二","三","四","五","六"];
+      document.getElementById("today").textContent = `${d.getMonth()+1}月${d.getDate()}日 · 星期${w[d.getDay()]}`;
+    }
+
+    function updateCounts() {
+      document.getElementById('count-ai').textContent  = ALL_NEWS.filter(n => n.isAI).length;
+      document.getElementById('count-all').textContent = ALL_NEWS.length;
+      ['国内科技','国外科技','商业','时政'].forEach(c => {
+        const el = document.getElementById('count-' + c);
+        if (el) el.textContent = ALL_NEWS.filter(n => categoryOf(n) === c).length;
+      });
+    }
+
+    function getCardCover(n) {
+      // ✅ 有真实图：直接用图 + 来源角标
+      if (n.cover && /^https?:\/\//.test(n.cover)) {
+        return `<div class="card-cover">
+          <img src="${escapeHtml(n.cover)}" loading="lazy" onerror="this.style.display='none';this.parentElement.dataset.failed='1';">
+          <span class="source-tag">${escapeHtml(n.source)}</span>
+        </div>`;
+      }
+      // ❌ 无真实图：用杂志风文字封面（金色渐变 + 大字标题）
+      const cat = categoryOf(n);
+      const title = n.title || '（无标题）';
+      const shortTitle = title.length > 50 ? title.slice(0, 50) + '…' : title;
+      return `<div class="card-cover text-cover">
+        <div class="text-cover-tag">${escapeHtml(cat)}</div>
+        <div class="text-cover-title">${escapeHtml(shortTitle)}</div>
+        <div class="text-cover-foot">
+          <span>${escapeHtml(n.source)}</span>
+          ${n.hot ? `<span>🔥 ${formatHot(n.hot)}</span>` : ''}
+        </div>
+      </div>`;
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const diff = (Date.now() - d.getTime()) / 1000;
+      if (diff < 3600) return Math.floor(diff/60) + ' 分钟前';
+      if (diff < 86400) return Math.floor(diff/3600) + ' 小时前';
+      if (diff < 86400*7) return Math.floor(diff/86400) + ' 天前';
+      return d.getMonth()+1 + '月' + d.getDate() + '日';
+    }
+
+    function renderContent() {
+      const list = getNewsList();
+      const el = document.getElementById("content");
+
+      if (list.length === 0) {
+        el.innerHTML = `<div class="empty-tip">
+          <h3>这里还没有新闻</h3>
+          <p>试试切到「全部新闻」，或点右上角「立即抓取新闻」</p>
+        </div>`;
+        return;
+      }
+
+      let html = "";
+      if (currentCat === "ai") {
+        const totalCount = ALL_NEWS.length;
+        html += `<div class="ai-banner">
+          <div class="ai-banner-icon">✨</div>
+          <div class="ai-banner-text">
+            <h3>今天 AI 帮你挑了 ${list.length} 条最值得看的</h3>
+            <p>从今日全部 ${totalCount} 条新闻中精选（AI 精选功能下阶段接入，现在是占位）</p>
+          </div>
+        </div>`;
+      }
+
+      if (currentView === "grid") {
+        html += `<div class="grid-view">` + list.map(n => `
+          <div class="news-card" onclick="openModal('${n._id}')">
+            ${getCardCover(n)}
+            <div class="card-body">
+              <div class="card-title">${escapeHtml(n.title)}</div>
+              <div class="card-summary">${escapeHtml(n.summary || '')}</div>
+              <div class="card-meta">
+                <span>${categoryOf(n)}</span>
+                <span>${timeAgo(n.pubDate)}</span>
+              </div>
+            </div>
+          </div>
+        `).join("") + `</div>`;
+      } else {
+        html += `<div class="list-view">` + list.map(n => `
+          <div class="list-item" onclick="openModal('${n._id}')">
+            <div class="list-thumb card-cover theme-${n.theme || themeFor(n.title)}" style="aspect-ratio:auto">${iconFor(categoryOf(n))}</div>
+            <div class="list-content">
+              <div class="list-title">${escapeHtml(n.title)}</div>
+              <div class="list-summary">${escapeHtml(n.summary || '')}</div>
+              <div class="list-meta">${n.source} · ${categoryOf(n)} · ${timeAgo(n.pubDate)}</div>
+            </div>
+          </div>
+        `).join("") + `</div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+
+    function setCategory(cat) {
+      currentCat = cat;
+      document.querySelectorAll(".nav-item").forEach(item => {
+        item.classList.toggle("active", item.dataset.cat === cat);
+      });
+      const titleMap = {
+        "ai":       ["✨ 今日 AI 精选",  "AI 帮你从全部内容中挑出最值得看的几条"],
+        "all":      ["📋 全部新闻",      "今天抓取到的所有内容，按热度排序"],
+        "国内科技": ["💡 国内科技",      "IT之家 + 爱范儿 + 少数派 —— 中文科技深度"],
+        "国外科技": ["🚀 国外科技",      "HackerNews + TechCrunch + The Verge —— AI、SpaceX、硅谷动态（英文，AI 助手可翻译）"],
+        "商业":     ["💰 商业 / 财经",   "36氪 + 虎嗅 + 掘金 + Yahoo Finance —— 创业、商业、美股财报"],
+        "时政":     ["🌍 时政 / 国际",   "BBC 中文 + DW + 澎湃 + 腾讯 + 新浪 —— 国内外大事"]
+      };
+      document.getElementById("page-title").textContent = titleMap[cat][0];
+      document.getElementById("page-subtitle").textContent = titleMap[cat][1];
+      renderContent();
+    }
+
+    function setView(view) {
+      currentView = view;
+      document.querySelectorAll(".view-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+      renderContent();
+    }
+
+    window.openModal = function(id) {
+      const n = ALL_NEWS.find(x => String(x._id) === String(id));
+      if (!n) return;
+      document.getElementById("modal-title").textContent = n.title;
+      document.getElementById("modal-meta").textContent = `${n.source} · ${categoryOf(n)} · ${timeAgo(n.pubDate)}`;
+      const body = n.content || n.summary || '（无正文）';
+      const aiBlock = n.isAI && n.aiReason
+        ? `<div style="background:linear-gradient(135deg,#3a2f24,#4a3f30);border:1px solid rgba(212,165,116,0.3);padding:12px 16px;border-radius:10px;margin-bottom:16px;font-size:14px;color:#e8c294;box-shadow:0 0 20px rgba(212,165,116,0.08);"><b style="color:#d4a574;">✨ AI 推荐理由：</b>${escapeHtml(n.aiReason)}</div>`
+        : '';
+      document.getElementById("modal-body").innerHTML = aiBlock + body;
+      document.getElementById("modal-link").href = n.link || '#';
+      document.getElementById("modal").classList.add("show");
+    };
+    window.closeModal = function() { document.getElementById("modal").classList.remove("show"); };
+    document.getElementById("modal").addEventListener("click", e => {
+      if (e.target.id === "modal") closeModal();
+    });
+
+    // ===== 状态条 =====
+    function showStatus(text, type = 'info', detail) {
+      const el = document.getElementById('status');
+      el.className = 'status-bar show ' + type;
+      el.innerHTML = text + (detail ? `<pre>${escapeHtml(typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2))}</pre>` : '');
+    }
+    function hideStatus() { document.getElementById('status').className = 'status-bar'; }
+
+    // ===== Supabase 初始化 + 数据加载 =====
+    async function initCloudBase() {
+      try {
+        if (typeof supabase === 'undefined' || !supabase.createClient) {
+          throw new Error('Supabase SDK 未加载，可能 CDN 被屏蔽');
+        }
+        sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('Supabase 初始化成功');
+        return true;
+      } catch (e) {
+        showStatus('❌ Supabase 初始化失败: ' + e.message, 'error');
+        return false;
+      }
+    }
+
+    async function loadNewsFromDB() {
+      try {
+        showStatus('🔄 正在从数据库加载新闻...', 'info');
+        // Supabase 直接在数据库端按 hot 降序排（Postgres 性能好）
+        const { data, error } = await sb
+          .from('news')
+          .select('*')
+          .order('hot', { ascending: false })
+          .order('pub_date', { ascending: false })
+          .limit(120);
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          ALL_NEWS = data.map(fromDbRow).map(n => ({ ...n, theme: themeFor(n.title || '') }));
+          showStatus(`✅ 加载成功：共 ${ALL_NEWS.length} 条真新闻`, 'success');
+          setTimeout(hideStatus, 3000);
+        } else {
+          ALL_NEWS = DEMO_NEWS.slice();
+          showStatus('⚠️ 数据库还没有新闻 —— 点右上角橙色按钮抓一次试试', 'info');
+        }
+        updateCounts();
+        renderContent();
+      } catch (e) {
+        ALL_NEWS = DEMO_NEWS.slice();
+        showStatus('❌ 加载失败：' + e.message + '（用占位数据展示）', 'error', e);
+        updateCounts();
+        renderContent();
+      }
+    }
+
+    // 抓一个热榜 API（DailyHot 格式）
+    async function fetchOneHotlist(h) {
+      const res = await fetch(h.api);
+      const data = await res.json();
+      if (!data || !data.data) throw new Error('热榜 API 返回异常: ' + (data.message || JSON.stringify(data).slice(0, 100)));
+      return data.data.slice(0, 15).map((item, idx) => ({
+        title: (item.title || '').trim(),
+        link: (item.url || item.mobileUrl || '').trim(),
+        summary: item.desc || (item.hot ? '热度 ' + formatHot(parseHot(item.hot)) : ''),
+        content: item.desc || item.content || '',
+        cover: item.cover || item.pic || item.image || '',
+        hot: parseHot(item.hot),
+        rank: idx + 1,  // 注意：B站等平台的 item.id 是字符串（BV 号），不能直接当 rank（int 字段）
+        pubDate: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+      }));
+    }
+
+    // 抓一个 RSS 源（通过 rss2json）
+    async function fetchOneRss(feed) {
+      const apiUrl = `https://api.rss2json.com/v1/api.json?count=10&rss_url=${encodeURIComponent(feed.url)}`;
+      const res = await fetch(apiUrl);
+      const data = await res.json();
+      if (data.status !== 'ok' || !data.items) throw new Error(data.message || 'RSS 转换失败');
+      return data.items.slice(0, 10).map(item => {
+        const desc = item.description || item.content || '';
+        return {
+          title: (item.title || '').trim(),
+          link: (item.link || '').trim(),
+          summary: stripHtmlText(desc).slice(0, 120) + (desc.length > 120 ? '…' : ''),
+          content: desc,
+          cover: getBestCover(item),
+          hot: 0,
+          rank: 0,
+          pubDate: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+        };
+      });
+    }
+
+    async function callFetchNews() {
+      const btn = document.getElementById('btn-fetch');
+      btn.disabled = true;
+      const t0 = Date.now();
+      const summary = [];
+      let totalAdded = 0;
+
+      // 把热榜和 RSS 源合并成统一列表
+      const ALL_SOURCES = [
+        ...HOTLISTS.map(h => ({ ...h, type: 'hot' })),
+        ...FEEDS.map(f => ({ ...f, type: 'rss' })),
+      ];
+
+      try {
+        for (let i = 0; i < ALL_SOURCES.length; i++) {
+          const src = ALL_SOURCES[i];
+          btn.textContent = `⏳ (${i+1}/${ALL_SOURCES.length}) 抓 ${src.source}...`;
+          showStatus(`🚀 正在抓取「${src.source}」(${i+1}/${ALL_SOURCES.length})...`, 'info');
+
+          try {
+            const items = src.type === 'hot' ? await fetchOneHotlist(src) : await fetchOneRss(src);
+            let added = 0, skipped = 0;
+            for (const item of items) {
+              if (!item.title || !item.link) continue;
+              const itemHash = strHash(item.title + '|' + item.link);
+              // Supabase 去重检查（用 hash 字段，已建 unique 索引）
+              const { count } = await sb.from('news').select('id', { count: 'exact', head: true }).eq('hash', itemHash);
+              if (count && count > 0) { skipped++; continue; }
+
+              await dbAdd('news', {
+                cat: src.cat,
+                source: src.source,
+                color: src.color || '',
+                title: item.title,
+                link: item.link,
+                summary: item.summary,
+                content: item.content,
+                cover: item.cover,
+                hot: item.hot,
+                rank: item.rank,
+                isHot: src.type === 'hot',
+                pubDate: item.pubDate,
+                fetchedAt: new Date().toISOString(),
+                isAI: false,
+                hash: itemHash,
+              });
+              added++;
+            }
+            summary.push({ source: src.source, added, skipped, total: items.length });
+            totalAdded += added;
+          } catch (e) {
+            summary.push({ source: src.source, error: String(e.message || e) });
+          }
+        }
+
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        const errorCount = summary.filter(s => s.error).length;
+        const successCount = summary.length - errorCount;
+        if (totalAdded > 0) {
+          showStatus(`🎉 抓取完成！用时 ${elapsed} 秒，新增 ${totalAdded} 条新闻${errorCount ? `（${errorCount} 个源失败，${successCount} 个源成功）` : ''}`, errorCount ? 'info' : 'success', summary);
+          setTimeout(() => loadNewsFromDB(), 1000);
+        } else if (errorCount === summary.length) {
+          showStatus(`❌ 所有 ${summary.length} 个源抓取都失败了（用时 ${elapsed} 秒）—— 可能 rss2json 服务异常或所有源 URL 都失效了`, 'error', summary);
+        } else if (errorCount > 0) {
+          showStatus(`ℹ️ 没有新内容（${successCount} 个源都是已抓过的，${errorCount} 个源失败）—— 用时 ${elapsed} 秒`, 'info', summary);
+        } else {
+          showStatus(`ℹ️ 没有新内容，所有 ${summary.length} 个源的最新条目都已抓过 —— 用时 ${elapsed} 秒`, 'success', summary);
+        }
+      } catch (e) {
+        showStatus('❌ 抓取过程出错：' + e.message, 'error', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📥 立即抓取新闻';
+      }
+    }
+
+    // ===== AI 精选（DeepSeek）=====
+    function getApiKey() {
+      if (!DEEPSEEK_API_KEY || !DEEPSEEK_API_KEY.trim()) {
+        showStatus('⚠️ 管理员还没配置 DeepSeek API Key，AI 功能暂不可用', 'error');
+        return null;
+      }
+      return DEEPSEEK_API_KEY.trim();
+    }
+
+    async function callAIPick() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const btn = document.getElementById('btn-ai');
+      btn.disabled = true;
+      btn.textContent = '✨ AI 思考中...';
+
+      try {
+        // 取最近 48 小时的新闻（最多 60 条）作为候选
+        const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+        const candidates = ALL_NEWS.filter(n => n.pubDate >= cutoff).slice(0, 60);
+        if (candidates.length === 0) {
+          showStatus('❌ 没有候选新闻可以精选，请先「立即抓取新闻」', 'error');
+          return;
+        }
+
+        showStatus(`🤖 正在让 DeepSeek 从 ${candidates.length} 条新闻里挑出最值得看的...（约 10-30 秒）`, 'info');
+
+        // 构造给 AI 的输入
+        const newsListText = candidates.map((n, i) => `${i+1}. [${n.cat}|${n.source}] ${n.title}`).join('\n');
+        const systemPrompt = `你是一名为知识型读者服务的资深编辑，读者是一位想了解世界、学习新知识的人。
+
+【硬性挑选标准 - 严格执行】
+✅ 必选：
+- AI / 机器人 / SpaceX / 国外前沿科技（含苹果、特斯拉、英伟达、OpenAI 等公司动态）
+- 中国 A 股 / 美股 / 企业财报 / 重大商业事件
+- 国际时政大事（地缘政治、外交、重大政策）
+- 真正"了解世界"的深度内容
+
+❌ 绝对不要：
+- 娱乐八卦、明星绯闻、网红视频、综艺、影视宣传
+- 体育赛事 / 游戏 / 动漫 / 小说推荐
+- 美食 / 旅游 / 生活技巧（除非有重大新发现）
+- 标题党、纯吐槽、纯情绪宣泄
+- B站/抖音那种短视频内容介绍
+
+【重复处理】
+如果多个源报道同一事件，只挑写得最好的那一条，其他全部不选。`;
+
+        const userPrompt = `下面是今日抓取的 ${candidates.length} 条新闻，请从中挑出 5-8 条最值得普通读者花时间阅读的，并给出推荐理由。
+
+请严格按以下 JSON 格式返回（不要加任何 markdown 标记）：
+{"selected": [{"id": 编号, "reason": "推荐理由（不超过30字）"}, ...]}
+
+新闻列表：
+${newsListText}`;
+
+        const t0 = Date.now();
+        const res = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            response_format: { type: 'json_object' }
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          if (res.status === 401) throw new Error('API Key 无效或已过期，请联系管理员更新');
+          throw new Error(`DeepSeek 返回错误 ${res.status}：${errText}`);
+        }
+
+        const data = await res.json();
+        const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!content) throw new Error('AI 返回内容为空');
+
+        let parsed;
+        try { parsed = JSON.parse(content); }
+        catch (e) { throw new Error('AI 返回的不是有效 JSON：' + content.slice(0, 200)); }
+
+        const selected = parsed.selected || [];
+        if (!Array.isArray(selected) || selected.length === 0) throw new Error('AI 没有挑出任何新闻');
+
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        const cost = (data.usage && data.usage.total_tokens) ? (data.usage.total_tokens * 0.000002).toFixed(6) : '~0';
+
+        // 把 AI 挑中的标记为 is_ai=true，写回数据库
+        let updated = 0;
+        for (const pick of selected) {
+          const idx = pick.id - 1;
+          if (idx < 0 || idx >= candidates.length) continue;
+          const news = candidates[idx];
+          const { error } = await sb
+            .from('news')
+            .update({ is_ai: true, ai_reason: pick.reason || '' })
+            .eq('id', news._id);
+          if (error) { console.error('AI 标记更新失败:', news.title, error); continue; }
+          updated++;
+        }
+
+        showStatus(`🎉 AI 精选完成！挑出 ${selected.length} 条，更新数据库 ${updated} 条，用时 ${elapsed} 秒，花费约 ¥${cost}`, 'success', parsed);
+        setTimeout(() => loadNewsFromDB(), 800);
+      } catch (e) {
+        showStatus('❌ AI 精选失败：' + e.message, 'error', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ 让 AI 精选';
+      }
+    }
+
+    // ===== 事件绑定 =====
+    document.querySelectorAll(".nav-item").forEach(item => {
+      item.addEventListener("click", () => setCategory(item.dataset.cat));
+    });
+    document.querySelectorAll(".view-btn").forEach(btn => {
+      btn.addEventListener("click", () => setView(btn.dataset.view));
+    });
+    document.getElementById('btn-fetch').addEventListener('click', callFetchNews);
+    document.getElementById('btn-ai').addEventListener('click', callAIPick);
+
+    // ===== AI 助手聊天 =====
+    const aiChatHistory = []; // [{role:'user'|'assistant', content:''}]
+
+    function aiAddMessage(role, text) {
+      const wrap = document.getElementById('ai-chat-messages');
+      const el = document.createElement('div');
+      el.className = 'ai-msg ai-msg-' + role;
+      el.textContent = text;
+      wrap.appendChild(el);
+      wrap.scrollTop = wrap.scrollHeight;
+      return el;
+    }
+    function aiAddLoading() {
+      const wrap = document.getElementById('ai-chat-messages');
+      const el = document.createElement('div');
+      el.className = 'ai-msg ai-msg-bot ai-msg-loading';
+      el.innerHTML = '<span></span><span></span><span></span>';
+      wrap.appendChild(el);
+      wrap.scrollTop = wrap.scrollHeight;
+      return el;
+    }
+
+    // 浮动球状态控制（眨眼/思考/兴奋）
+    const aiFab = () => document.getElementById('ai-fab');
+    function setAiFabState(state) {
+      const el = aiFab();
+      if (!el) return;
+      el.classList.remove('thinking', 'excited', 'blink', 'alert');
+      if (state) el.classList.add(state);
+    }
+    // 闲置时随机眨眼
+    function startIdleBlinking() {
+      setInterval(() => {
+        const el = aiFab();
+        if (!el || el.classList.contains('thinking') || el.classList.contains('excited')) return;
+        el.classList.add('blink');
+        setTimeout(() => el.classList.remove('blink'), 400);
+      }, 4000 + Math.random() * 3000);
+    }
+
+    async function aiSend() {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        aiAddMessage('bot', '❌ 管理员还没配置 DeepSeek API Key，AI 功能暂不可用');
+        return;
+      }
+      const input = document.getElementById('ai-chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      input.style.height = '40px';
+
+      aiAddMessage('user', text);
+      aiChatHistory.push({ role: 'user', content: text });
+
+      const sendBtn = document.getElementById('ai-chat-send');
+      sendBtn.disabled = true;
+      setAiFabState('thinking');  // 浮动球开始思考动画
+      const loading = aiAddLoading();
+
+      try {
+        const recentTitles = ALL_NEWS.slice(0, 30).map((n, i) => `${i+1}. [${n.cat}] ${n.title}`).join('\n');
+        const systemPrompt = `你是「每日新闻精选」网站的 AI 助手，基于 DeepSeek，性格温暖、专业、有人情味。
+当前网站收录的最新新闻（仅供你参考用户提问的上下文）：
+${recentTitles}
+
+回答原则：
+- 中文回答，简洁有温度（不要过于机械）
+- 如果用户问的是新闻相关，参考上面列表；如果新闻里没有用户问的话题，直接说"没在最新新闻里看到"，不要编造
+- 如果用户问的是其他问题（生活、学习、工作等），正常回答
+- 不要使用过多 markdown 格式，纯文本即可
+- 适当用 emoji 让回答更生动（但不要滥用）`;
+
+        const messages = [
+          { role: 'system', content: systemPrompt },
+          ...aiChatHistory.slice(-10)
+        ];
+
+        // ⭐ 流式响应：让 AI 边出字边显示
+        const res = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages,
+            temperature: 0.7,
+            max_tokens: 800,
+            stream: true   // 启用流式
+          })
+        });
+
+        loading.remove();
+
+        if (!res.ok) {
+          const errText = await res.text();
+          if (res.status === 401) {
+            aiAddMessage('bot', '❌ API Key 无效或已过期，请联系管理员更新');
+            return;
+          }
+          aiAddMessage('bot', `❌ 出错了 (${res.status})：${errText.slice(0, 200)}`);
+          return;
+        }
+
+        // 创建消息元素，准备逐字填充
+        const msgEl = aiAddMessage('bot', '');
+        msgEl.classList.add('ai-msg-streaming');
+        let fullReply = '';
+
+        // 读取流式响应
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') break;
+            try {
+              const json = JSON.parse(data);
+              const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
+              if (delta) {
+                fullReply += delta;
+                msgEl.textContent = fullReply;
+                const wrap = document.getElementById('ai-chat-messages');
+                wrap.scrollTop = wrap.scrollHeight;
+              }
+            } catch (e) { /* 忽略 parse 错误 */ }
+          }
+        }
+
+        msgEl.classList.remove('ai-msg-streaming');
+        if (fullReply) {
+          aiChatHistory.push({ role: 'assistant', content: fullReply });
+          setAiFabState('excited');  // 收到回复后兴奋一下
+          setTimeout(() => setAiFabState(null), 700);
+        } else {
+          msgEl.textContent = '❌ AI 回复为空';
+        }
+      } catch (e) {
+        loading.remove();
+        aiAddMessage('bot', '❌ 网络异常：' + e.message);
+      } finally {
+        sendBtn.disabled = false;
+        setTimeout(() => setAiFabState(null), 800);
+        input.focus();
+      }
+    }
+
+    // ===== AI 主动提示（30 秒后弹气泡）=====
+    function showProactiveTip() {
+      const bubble = document.getElementById('ai-tip-bubble');
+      const text = document.getElementById('ai-tip-text');
+      if (!bubble || !text) return;
+      // 如果用户已经打开过聊天面板，就不再弹
+      if (document.getElementById('ai-chat').classList.contains('show')) return;
+
+      // 根据当前新闻动态选个话题
+      const tips = [
+        '今天有 ' + ALL_NEWS.filter(n => n.cat === '科技').length + ' 条科技新闻，要我帮你挑重点吗？✨',
+        '想了解今天 AI 圈发生了什么？点我聊聊 🤖',
+        '你看到 SpaceX 的报道了吗？点我帮你总结 🚀',
+        '今天财经有什么大事？我可以帮你梳理 💰',
+        '想看看今天最值得读的几条新闻？',
+      ];
+      text.textContent = tips[Math.floor(Math.random() * tips.length)];
+      bubble.classList.add('show');
+      aiFab().classList.add('alert');  // 浮动球冒红点
+      // 8 秒后自动消失
+      setTimeout(() => {
+        bubble.classList.remove('show');
+        aiFab().classList.remove('alert');
+      }, 8000);
+    }
+    // 点气泡 → 打开聊天面板
+    document.getElementById('ai-tip-bubble').addEventListener('click', () => {
+      document.getElementById('ai-tip-bubble').classList.remove('show');
+      aiFab().classList.remove('alert');
+      document.getElementById('ai-fab').click();  // 触发打开聊天
+    });
+    // 30 秒后第一次提示，之后每 5 分钟一次
+    setTimeout(showProactiveTip, 30000);
+    setInterval(showProactiveTip, 5 * 60 * 1000);
+
+    // 启动闲置眨眼
+    startIdleBlinking();
+
+    // 绑定 AI 助手事件
+    document.getElementById('ai-fab').addEventListener('click', () => {
+      document.getElementById('ai-chat').classList.add('show');
+      document.getElementById('ai-fab').classList.add('hide');
+      setTimeout(() => document.getElementById('ai-chat-input').focus(), 100);
+    });
+    document.getElementById('ai-chat-close').addEventListener('click', () => {
+      document.getElementById('ai-chat').classList.remove('show');
+      document.getElementById('ai-fab').classList.remove('hide');
+    });
+    document.getElementById('ai-chat-send').addEventListener('click', aiSend);
+    document.getElementById('ai-chat-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(); }
+    });
+    document.getElementById('ai-chat-input').addEventListener('input', e => {
+      e.target.style.height = '38px';
+      e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+    });
+
+    // ===== 自动检查更新（启动时如果距上次抓取>1小时，自动抓一次）=====
+    async function autoFetchIfStale() {
+      try {
+        const { data, error } = await sb
+          .from('news')
+          .select('fetched_at')
+          .order('fetched_at', { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        const lastFetchAt = data && data[0] && data[0].fetched_at
+          ? new Date(data[0].fetched_at).getTime() : 0;
+        const elapsedHours = (Date.now() - lastFetchAt) / 3600000;
+        if (elapsedHours >= 1) {
+          console.log(`距上次抓取 ${elapsedHours.toFixed(1)} 小时，自动更新...`);
+          callFetchNews();  // 不 await，后台跑
+        } else {
+          console.log(`距上次抓取仅 ${(elapsedHours*60).toFixed(0)} 分钟，跳过自动抓取`);
+        }
+      } catch (e) {
+        console.warn('自动检查更新失败:', e);
+      }
+    }
+
+    // ===== 启动 =====
+    (async () => {
+      renderDate();
+      // 先用占位数据渲染，体验不会白屏
+      ALL_NEWS = DEMO_NEWS.slice();
+      updateCounts();
+      renderContent();
+      // 异步初始化 CloudBase + 加载真数据
+      const ok = await initCloudBase();
+      if (ok) {
+        await loadNewsFromDB();
+        autoFetchIfStale();  // 后台自动检查更新
+      }
+    })();
+  </script>
+</body>
+</html>
